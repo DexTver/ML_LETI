@@ -71,36 +71,53 @@ data["bought_in_last_month"] = data["bought_in_last_month"].fillna(median_val).a
 data["current/discounted_price"] = pd.to_numeric(data["current/discounted_price"], errors="coerce").round(2)
 median_val = data["current/discounted_price"].median()
 data["current/discounted_price"] = data["current/discounted_price"].fillna(median_val)
+data = data.rename(columns={"current/discounted_price": "total_price"})
 
 # - price_on_variant – (очень странный столбец с непонятными данными. в описании нет пояснений к нему. убираем)
 data = data.drop("price_on_variant", axis=1)
 
-# + listed_price – Изначальная цена (есть строки со значением "No Discount". Такие надо заменить на значения из current/discounted_price)
+# + listed_price – Изначальная цена (есть строки со значением "No Discount". Такие надо заменить на значения из total_price)
 data["listed_price"] = data["listed_price"].replace("No Discount", np.nan)
 data["listed_price"] = data["listed_price"].str.replace("[$,]", "", regex=True).astype(float)
-data["listed_price"] = data["listed_price"].fillna(data["current/discounted_price"]).round(2)
+data["listed_price"] = data["listed_price"].fillna(data["total_price"]).round(2)
 
-# + is_best_seller – Указывает, помечен ли товар как «Бестселлер» (имеется несколько строковых значений)
-data["is_best_seller"] = data["is_best_seller"].str.lower()
+# - is_best_seller – Указывает, помечен ли товар как «Бестселлер» (не представляет интереса. убираем)
+data = data.drop("is_best_seller", axis=1)
 
-# + is_sponsored – Является ли товар рекламным или попал в рекомендации естественным образом (два значения "Organic" - False, "Sponsored" - True)
-data["is_sponsored"] = data["is_sponsored"].map(lambda x: True if x == "Sponsored" else False)
+# + is_sponsored – Является ли товар рекламным или попал в рекомендации естественным образом (два значения "Organic" - 0, "Sponsored" - 1)
+data["is_sponsored"] = data["is_sponsored"].map(lambda x: 1 if x == "Sponsored" else 0)
 
 # + is_couponed – Наличие специальных скидочных купонов, если есть то стоимость (где "No Coupon" заменим на 0, остальное на номинал купона)
-is_percent = data["is_couponed"].str.contains("%")
-numbers = data["is_couponed"].str.extract(r"(\d+\.?\d*)")[0].astype(float)
-data["is_couponed"] = np.where(
-    data["is_couponed"].str.contains("No Coupon"),
-    0,
-    np.where(
-        is_percent,
-        (data["current/discounted_price"] * numbers / 100).round(2),
-        numbers.round(2)
-    )
+coupon = data["is_couponed"].astype(str)
+mask_no = coupon.str.contains("No Coupon", case=False, na=False)
+mask_dollar = coupon.str.contains(r"\$", na=False)
+dollar_val = (coupon.str.extract(r"(\d+\.?\d*)")[0].astype(float))
+mask_dollar_ge10 = mask_dollar & (dollar_val >= 10)
+mask_dollar_lt10 = mask_dollar & (dollar_val < 10)
+mask_percent = coupon.str.contains(r"%", na=False)
+percent_val = (coupon.str.extract(r"(\d+\.?\d*)")[0].astype(float))
+mask_percent_ge25 = mask_percent & (percent_val >= 25)
+mask_percent_lt25 = mask_percent & (percent_val < 25)
+data["is_couponed"] = np.select(
+    [
+        mask_no,
+        mask_dollar_ge10,
+        mask_dollar_lt10,
+        mask_percent_ge25,
+        mask_percent_lt25
+    ],
+    [
+        "no",
+        ">=10$",
+        "<10$",
+        ">=25%",
+        "<25%"
+    ],
+    default="no"
 )
 
 # + buy_box_availability – Наличие кнопки BuyBox на странице поиска Amazon (в описании null означает False, "Add to cart" - True. На них и заменим)
-data["buy_box_availability"] = data["buy_box_availability"].map(lambda x: True if x == "Add to cart" else False)
+data["buy_box_availability"] = data["buy_box_availability"].map(lambda x: 1 if x == "Add to cart" else 0)
 
 # - delivery_details – Ожидаемая дата доставки (зависит от даты заказа. убираем)
 # - sustainability_badges – Теги, связанные с экологичностью и устойчивым развитием (слишком много пропусков. заполнить их нереально: это строки с описанием. убираем)
@@ -118,19 +135,18 @@ data = data.drop(columns=[
 '''Проверим количество пропусков'''
 # print(data.isna().sum())
 '''
-title                       0
-rating                      0
-number_of_reviews           0
-bought_in_last_month        0
-current/discounted_price    0
-listed_price                0
-is_best_seller              0
-is_sponsored                0
-is_couponed                 0
-buy_box_availability        0
+title                   0
+rating                  0
+number_of_reviews       0
+bought_in_last_month    0
+total_price             0
+listed_price            0
+is_sponsored            0
+is_couponed             0
+buy_box_availability    0
 '''
 
-data.to_csv("data/amazon_products_sales_data_full.csv", index=False)
+# data.to_csv("data/amazon_products_sales_data_full.csv", index=False)
 
 
 '''2. Нормализуем данные'''
@@ -140,72 +156,160 @@ numeric_cols = [
     "rating",
     "number_of_reviews",
     "bought_in_last_month",
-    "current/discounted_price",
-    "listed_price",
-    "is_couponed"
+    "total_price",
+    "listed_price"
 ]
 
 scaler = MinMaxScaler()
 data[numeric_cols] = scaler.fit_transform(data[numeric_cols])
 
-data.to_csv("data/amazon_products_sales_data_normalized.csv", index=False)
+# Создадим более объективную характеристики товара "Репутация" (Среднее арифметическое от нормализованных значений двух столбцов)
+data["reputation"] = data[["rating", "number_of_reviews"]].mean(axis=1)
+data = data.drop(columns=["rating", "number_of_reviews"])
+
+# Сгруппируем столбец
+def demand_group(x):
+    if 0 <= x <= 0.1:
+        return "low"
+    elif 0.11 <= x <= 0.66:
+        return "middle"
+    else:
+        return "high"
+
+data["demand"] = data["bought_in_last_month"].apply(demand_group)
+data = data.drop(columns=["bought_in_last_month"])
+
+# data.to_csv("data/amazon_products_sales_data_normalized.csv", index=False)
 
 
 '''3. Удалим дубликаты'''
 # print(data.duplicated().sum())
+'''33413'''
 # print(data.shape[0])
+'''42675'''
 
 # Удалить только точные копии строк (по всем столбцам):
 data = data.drop_duplicates()
 
-# Удалить дубликаты только по названию (title):
-# data = data.drop_duplicates(subset=["title"])
-
-# Удалить дубликаты по названию и цене:
-# data = data.drop_duplicates(subset=["title", "listed_price"])
-
 # print(data.shape[0])
+'''9262'''
 
-data.to_csv("data/amazon_products_sales_data_cleaned.csv", index=False)
+# data.to_csv("data/amazon_products_sales_data_cleaned.csv", index=False)
 
 
 '''4. Визуализируем данные'''
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.graph_objects as go
 
 
-# Диаграмма рассеяния
+# Диаграммы рассеяния
 plt.figure(figsize=(10,7))
-plt.scatter(
-    data["current/discounted_price"],
-    data["number_of_reviews"],
-    alpha=0.6, edgecolor='k'
-)
-plt.xlabel("Discounted Price (normalized)")
-plt.ylabel("Number of Reviews (normalized)")
-plt.title("Price vs Reviews")
+plt.scatter('total_price', 'listed_price', data=data)
+plt.xlabel("Total Price")
+plt.ylabel("Listed Price")
 plt.show()
 
-# Ящик с усами
-plt.figure(figsize=(8,6))
-sns.boxplot(y=data["bought_in_last_month"])
-plt.ylabel("Bought in Last Month (normalized)")
-plt.title("Distribution of Units Bought in Last Month")
+plt.figure(figsize=(10,7))
+plt.scatter('total_price', 'reputation', data=data)
+plt.legend(('Low', 'Middle', 'High'), title='Demand')
+plt.xlabel("Total Price")
+plt.ylabel("Reputation")
 plt.show()
 
-# Гистограмма
-plt.figure(figsize=(8,6))
-plt.hist(data["current/discounted_price"], bins=30, color="skyblue", edgecolor="black")
-plt.xlabel("Discounted Price (normalized)")
-plt.ylabel("Number of Products")
-plt.title("Distribution of Discounted Price")
+plt.figure(figsize=(10,7))
+plt.scatter('listed_price', 'reputation', data=data)
+plt.legend(('Low', 'Middle', 'High'), title='Demand')
+plt.xlabel("Listed Price")
+plt.ylabel("Reputation")
+plt.show()
+
+
+# Ящики с усами
+fig = go.Figure()
+for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
+    fig.add_trace(go.Box(
+        y=data.loc[data["demand"] == group, "total_price"],
+        name=group,
+        marker_color=color
+    ))
+fig.update_layout(title="Boxplot: Total Price по Demand", yaxis_title="Total Price")
+fig.show()
+
+fig = go.Figure()
+for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
+    fig.add_trace(go.Box(
+        y=data.loc[data["demand"] == group, "reputation"],
+        name=group,
+        marker_color=color
+    ))
+fig.update_layout(title="Boxplot: Reputation по Demand", yaxis_title="Reputation")
+fig.show()
+
+fig = go.Figure()
+for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
+    fig.add_trace(go.Box(
+        y=data.loc[data["demand"] == group, "listed_price"],
+        name=group,
+        marker_color=color
+    ))
+fig.update_layout(title="Boxplot: Listed Price по Demand", yaxis_title="Listed Price")
+fig.show()
+
+fig = go.Figure()
+for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "orange", "purple"]):
+    fig.add_trace(go.Box(
+        y=data.loc[data["is_couponed"] == group, "total_price"],
+        name=group,
+        marker_color=color
+    ))
+fig.update_layout(title="Boxplot: Total Price по Is Couponed", yaxis_title="Total Price")
+fig.show()
+
+fig = go.Figure()
+for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "orange", "purple"]):
+    fig.add_trace(go.Box(
+        y=data.loc[data["is_couponed"] == group, "reputation"],
+        name=group,
+        marker_color=color
+    ))
+fig.update_layout(title="Boxplot: Reputation по Is Couponed", yaxis_title="Reputation")
+fig.show()
+
+fig = go.Figure()
+for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "orange", "purple"]):
+    fig.add_trace(go.Box(
+        y=data.loc[data["is_couponed"] == group, "listed_price"],
+        name=group,
+        marker_color=color
+    ))
+fig.update_layout(title="Boxplot: Listed Price по Is Couponed", yaxis_title="Listed Price")
+fig.show()
+
+
+# Гистограммы
+plt.figure(figsize=(10, 7))
+sns.countplot(data=data, x="demand", hue="demand", palette="Set1", order=["low", "middle", "high"])
+plt.xlabel("Demand")
+plt.ylabel("Count")
+plt.show()
+
+plt.figure(figsize=(10, 7))
+sns.countplot(data=data, x="is_couponed", hue="is_couponed", palette="Set2", order=data["is_couponed"].unique())
+plt.xlabel("Is Couponed")
+plt.ylabel("Count")
 plt.show()
 
 
 '''5. Статистический анализ'''
+numeric_cols = [
+    "reputation",
+    "total_price",
+    "listed_price"
+]
+
 # Первичная матрица pairplot
 sns.pairplot(data[numeric_cols])
-plt.suptitle("Pairplot: первичные данные", y=1.02)
 plt.show()
 
 # Функция для поиска выбросов по 3 сигмам
@@ -215,16 +319,14 @@ def outliers_indices(df, feature):
     return df[(df[feature] < mean - 3*std) | (df[feature] > mean + 3*std)].index
 outliers_sets = [outliers_indices(data, col) for col in numeric_cols]
 outliers_all = set().union(*outliers_sets)
-# print(f"Количество выбросов, которые будут удалены: {len(outliers_all)}")
+# print(len(outliers_all))
 data_clean = data.drop(outliers_all)
 
 # Матрица pairplot без выбросов
 sns.pairplot(data_clean[numeric_cols])
-plt.suptitle("Pairplot: данные без выбросов", y=1.02)
 plt.show()
 
 # Корреляционная матрица
-plt.figure(figsize=(8,6))
+plt.figure(figsize=(10,7))
 sns.heatmap(data_clean[numeric_cols].corr(method='spearman'), annot=True, fmt=".2f", cmap="coolwarm")
-plt.title("Spearman Correlation Matrix")
 plt.show()
