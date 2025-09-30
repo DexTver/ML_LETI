@@ -146,7 +146,7 @@ is_couponed             0
 buy_box_availability    0
 '''
 
-# data.to_csv("data/amazon_products_sales_data_full.csv", index=False)
+data.to_csv("data/amazon_products_sales_data_full.csv", index=False)
 
 
 '''2. Нормализуем данные'''
@@ -169,9 +169,9 @@ data = data.drop(columns=["rating", "number_of_reviews"])
 
 # Сгруппируем столбец
 def demand_group(x):
-    if 0 <= x <= 0.1:
+    if 0 <= x <= 0.01:
         return "low"
-    elif 0.11 <= x <= 0.66:
+    elif 0.01 < x <= 0.1:
         return "middle"
     else:
         return "high"
@@ -179,7 +179,7 @@ def demand_group(x):
 data["demand"] = data["bought_in_last_month"].apply(demand_group)
 data = data.drop(columns=["bought_in_last_month"])
 
-# data.to_csv("data/amazon_products_sales_data_normalized.csv", index=False)
+data.to_csv("data/amazon_products_sales_data_normalized.csv", index=False)
 
 
 '''3. Удалим дубликаты'''
@@ -194,7 +194,7 @@ data = data.drop_duplicates()
 # print(data.shape[0])
 '''9262'''
 
-# data.to_csv("data/amazon_products_sales_data_cleaned.csv", index=False)
+data.to_csv("data/amazon_products_sales_data_cleaned.csv", index=False)
 
 
 '''4. Визуализируем данные'''
@@ -208,21 +208,22 @@ plt.figure(figsize=(10,7))
 plt.scatter('total_price', 'listed_price', data=data)
 plt.xlabel("Total Price")
 plt.ylabel("Listed Price")
-plt.show()
+plt.savefig("images/scatter_total_vs_listed.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 plt.figure(figsize=(10,7))
 plt.scatter('total_price', 'reputation', data=data)
-plt.legend(('Low', 'Middle', 'High'), title='Demand')
 plt.xlabel("Total Price")
 plt.ylabel("Reputation")
-plt.show()
+plt.savefig("images/scatter_total_vs_reputation.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 plt.figure(figsize=(10,7))
 plt.scatter('listed_price', 'reputation', data=data)
-plt.legend(('Low', 'Middle', 'High'), title='Demand')
 plt.xlabel("Listed Price")
 plt.ylabel("Reputation")
-plt.show()
+plt.savefig("images/scatter_listed_vs_reputation.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 # Ящики с усами
@@ -234,7 +235,7 @@ for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
         marker_color=color
     ))
 fig.update_layout(title="Boxplot: Total Price по Demand", yaxis_title="Total Price")
-fig.show()
+fig.write_image("images/box_total_price_by_demand.png")
 
 fig = go.Figure()
 for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
@@ -244,7 +245,7 @@ for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
         marker_color=color
     ))
 fig.update_layout(title="Boxplot: Reputation по Demand", yaxis_title="Reputation")
-fig.show()
+fig.write_image("images/box_reputation_by_demand.png")
 
 fig = go.Figure()
 for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
@@ -254,7 +255,7 @@ for group, color in zip(["low", "middle", "high"], ["blue", "green", "red"]):
         marker_color=color
     ))
 fig.update_layout(title="Boxplot: Listed Price по Demand", yaxis_title="Listed Price")
-fig.show()
+fig.write_image("images/box_listed_price_by_demand.png")
 
 fig = go.Figure()
 for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "orange", "purple"]):
@@ -264,7 +265,7 @@ for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "
         marker_color=color
     ))
 fig.update_layout(title="Boxplot: Total Price по Is Couponed", yaxis_title="Total Price")
-fig.show()
+fig.write_image("images/box_total_price_by_couponed.png")
 
 fig = go.Figure()
 for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "orange", "purple"]):
@@ -274,7 +275,7 @@ for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "
         marker_color=color
     ))
 fig.update_layout(title="Boxplot: Reputation по Is Couponed", yaxis_title="Reputation")
-fig.show()
+fig.write_image("images/box_reputation_by_couponed.png")
 
 fig = go.Figure()
 for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "orange", "purple"]):
@@ -284,7 +285,7 @@ for group, color in zip(data["is_couponed"].unique(), ["blue", "green", "red", "
         marker_color=color
     ))
 fig.update_layout(title="Boxplot: Listed Price по Is Couponed", yaxis_title="Listed Price")
-fig.show()
+fig.write_image("images/box_listed_price_by_couponed.png")
 
 
 # Гистограммы
@@ -292,13 +293,15 @@ plt.figure(figsize=(10, 7))
 sns.countplot(data=data, x="demand", hue="demand", palette="Set1", order=["low", "middle", "high"])
 plt.xlabel("Demand")
 plt.ylabel("Count")
-plt.show()
+plt.savefig("images/hist_demand.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 plt.figure(figsize=(10, 7))
 sns.countplot(data=data, x="is_couponed", hue="is_couponed", palette="Set2", order=data["is_couponed"].unique())
 plt.xlabel("Is Couponed")
 plt.ylabel("Count")
-plt.show()
+plt.savefig("images/hist_is_couponed.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 
 '''5. Статистический анализ'''
@@ -310,7 +313,8 @@ numeric_cols = [
 
 # Первичная матрица pairplot
 sns.pairplot(data[numeric_cols])
-plt.show()
+plt.savefig("images/pairplot_all.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 # Функция для поиска выбросов по 3 сигмам
 def outliers_indices(df, feature):
@@ -324,9 +328,11 @@ data_clean = data.drop(outliers_all)
 
 # Матрица pairplot без выбросов
 sns.pairplot(data_clean[numeric_cols])
-plt.show()
+plt.savefig("images/pairplot_clean.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 # Корреляционная матрица
 plt.figure(figsize=(10,7))
 sns.heatmap(data_clean[numeric_cols].corr(method='spearman'), annot=True, fmt=".2f", cmap="coolwarm")
-plt.show()
+plt.savefig("images/heatmap_corr.png", dpi=300, bbox_inches="tight")
+plt.close()
