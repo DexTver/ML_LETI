@@ -41,13 +41,13 @@ def evaluate_model(name, model, X_test, y_test):
 results = {}
 
 # KNN
-knn = KNeighborsClassifier(n_neighbors=5)
+knn = KNeighborsClassifier(n_neighbors=15)
 knn.fit(X_train, y_train)
 results['KNN'] = evaluate_model('KNN', knn, X_test, y_test)
-'''KNN: Accuracy: 0.8633 Precision: 0.8291 Recall: 0.8633 F1-Score: 0.8369'''
+'''KNN: Accuracy: 0.8701 Precision: 0.8305 Recall: 0.8701 F1-Score: 0.8316'''
 
 # SVM
-svm = SVC(kernel='rbf', random_state=42)
+svm = SVC(kernel='linear', C=10, random_state=42)
 svm.fit(X_train, y_train)
 results['SVM'] = evaluate_model('SVM', svm, X_test, y_test)
 '''SVM: Accuracy: 0.8651 Precision: 0.8833 Recall: 0.8651 F1-Score: 0.8025'''
@@ -114,7 +114,8 @@ plt.figure(figsize=(10, 8))
 models_binary = {
     'Logistic Regression': LogisticRegression(random_state=42, max_iter=1000),
     'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
-    'SVM': SVC(kernel='rbf', probability=True, random_state=42)
+    'SVM': SVC(kernel='linear', C=10, random_state=42),
+    'KNN': KNeighborsClassifier(n_neighbors=15)
 }
 for name, model in models_binary.items():
     model.fit(X_train, y_train_binary)
