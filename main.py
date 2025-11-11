@@ -22,7 +22,7 @@ X = numeric_data.values
 
 
 print("\n=== K-MEANS CLUSTERING ===")
-kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+kmeans = KMeans(n_clusters=9, random_state=42, n_init=10)
 kmeans_labels = kmeans.fit_predict(X)
 
 kmeans_silhouette = silhouette_score(X, kmeans_labels)
@@ -33,18 +33,18 @@ print(f"Davies-Bouldin Index: {kmeans_davies_bouldin:.4f}")
 print(f"Calinski-Harabasz Score: {kmeans_calinski:.4f}")
 
 plt.figure(figsize=(10, 7))
-plt.scatter(X[:, 0], X[:, 1], c=kmeans_labels, cmap='viridis', s=50, alpha=0.6)
-plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], c='red', marker='X', s=300, edgecolors='black', linewidth=2)
-plt.xlabel(numeric_data.columns[0])
-plt.ylabel(numeric_data.columns[1])
-plt.title(f'K-Means')
+plt.scatter(numeric_data['reputation'], numeric_data['total_price'], c=kmeans_labels, cmap='viridis', alpha=0.6)
+plt.scatter(kmeans.cluster_centers_[:, numeric_data.columns.get_loc('reputation')], kmeans.cluster_centers_[:, numeric_data.columns.get_loc('total_price')], c='red', marker='X', s=300, edgecolors='black', linewidth=2)
+plt.xlabel('Reputation')
+plt.ylabel('Total Price')
+plt.title('K-Means Clustering (reputation vs total_price)')
 plt.savefig('images/01_kmeans.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 
 print("\n=== HIERARCHICAL CLUSTERING ===")
 linkage_method = 'ward'
-agglom = AgglomerativeClustering(n_clusters=3, linkage=linkage_method)
+agglom = AgglomerativeClustering(n_clusters=9, linkage=linkage_method)
 agglom_labels = agglom.fit_predict(X)
 
 agglom_silhouette = silhouette_score(X, agglom_labels)
@@ -63,15 +63,15 @@ plt.savefig('images/02_dendrogram.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 plt.figure(figsize=(10, 7))
-plt.scatter(X[:, 0], X[:, 1], c=agglom_labels, cmap='plasma', s=50, alpha=0.6)
-plt.xlabel(numeric_data.columns[0])
-plt.ylabel(numeric_data.columns[1])
-plt.title(f'Hierarchical Clustering')
+plt.scatter(numeric_data['reputation'], numeric_data['total_price'], c=agglom_labels, cmap='plasma', alpha=0.6)
+plt.xlabel('Reputation')
+plt.ylabel('Total Price')
+plt.title('Hierarchical Clustering (reputation vs total_price)')
 plt.savefig('images/03_hierarchical.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 print("\n=== DBSCAN CLUSTERING ===")
-dbscan = DBSCAN(eps=0.5, min_samples=5)
+dbscan = DBSCAN(eps=0.3, min_samples=5)
 dbscan_labels = dbscan.fit_predict(X)
 
 n_clusters_dbscan = len(set(dbscan_labels)) - (1 if -1 in dbscan_labels else 0)
@@ -84,20 +84,11 @@ if n_clusters_dbscan > 1:
     print(f"Silhouette Score: {dbscan_silhouette:.4f}")
 
 plt.figure(figsize=(10, 7))
-unique_labels = set(dbscan_labels)
-colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
-for k, col in zip(unique_labels, colors):
-    if k == -1:
-        col = [0, 0, 0, 1]
-    class_member_mask = (dbscan_labels == k)
-    xy = X[class_member_mask]
-    if k == -1:
-        plt.scatter(xy[:, 0], xy[:, 1], c=[col], marker='x', s=100, alpha=0.5)
-    else:
-        plt.scatter(xy[:, 0], xy[:, 1], c=[col], marker='o', s=50, alpha=0.7)
-plt.xlabel(numeric_data.columns[0])
-plt.ylabel(numeric_data.columns[1])
-plt.title(f'DBSCAN')
+plt.scatter(numeric_data['reputation'], numeric_data['total_price'],
+            c=dbscan_labels, cmap='Spectral', alpha=0.6)
+plt.xlabel('Reputation')
+plt.ylabel('Total Price')
+plt.title('DBSCAN (reputation vs total_price)')
 plt.savefig('images/04_dbscan.png', dpi=300, bbox_inches='tight')
 plt.close()
 
