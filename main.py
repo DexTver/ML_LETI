@@ -1,15 +1,13 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import os
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
 from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.metrics import (
     silhouette_score, davies_bouldin_score, calinski_harabasz_score,
-    mean_squared_error, r2_score, mean_absolute_error
-)
+    mean_squared_error, r2_score, mean_absolute_error)
+from sklearn.preprocessing import LabelEncoder
 from scipy.cluster.hierarchy import dendrogram, linkage
 
 data = pd.read_csv('data/amazon_products_sales_data_cleaned.csv')
@@ -17,7 +15,13 @@ data = pd.read_csv('data/amazon_products_sales_data_cleaned.csv')
 print(f"Data size: {data.shape}")
 print(data.head().to_string())
 
-numeric_data = data.select_dtypes(include=[np.number]).dropna()
+data_processed = data.copy()
+le_coupon = LabelEncoder()
+data_processed['is_couponed'] = le_coupon.fit_transform(data_processed['is_couponed'].astype(str))
+le_demand = LabelEncoder()
+data_processed['demand'] = le_demand.fit_transform(data_processed['demand'].astype(str))
+columns_to_keep = ['total_price', 'listed_price', 'is_couponed', 'reputation', 'demand']
+numeric_data = data_processed[columns_to_keep].dropna()
 X = numeric_data.values
 
 
@@ -30,7 +34,6 @@ kmeans_davies_bouldin = davies_bouldin_score(X, kmeans_labels)
 kmeans_calinski = calinski_harabasz_score(X, kmeans_labels)
 print(f"Silhouette Score: {kmeans_silhouette:.4f}")
 print(f"Davies-Bouldin Index: {kmeans_davies_bouldin:.4f}")
-print(f"Calinski-Harabasz Score: {kmeans_calinski:.4f}")
 
 plt.figure(figsize=(10, 7))
 plt.scatter(numeric_data['reputation'], numeric_data['total_price'], c=kmeans_labels, cmap='viridis', alpha=0.6)
@@ -52,7 +55,6 @@ agglom_davies_bouldin = davies_bouldin_score(X, agglom_labels)
 agglom_calinski = calinski_harabasz_score(X, agglom_labels)
 print(f"Silhouette Score: {agglom_silhouette:.4f}")
 print(f"Davies-Bouldin Index: {agglom_davies_bouldin:.4f}")
-print(f"Calinski-Harabasz Score: {agglom_calinski:.4f}")
 
 # Дендрограмма
 Z = linkage(X[:min(50, len(X))], method=linkage_method)
@@ -70,8 +72,9 @@ plt.title('Hierarchical Clustering (reputation vs total_price)')
 plt.savefig('images/03_hierarchical.png', dpi=300, bbox_inches='tight')
 plt.close()
 
+
 print("\n=== DBSCAN CLUSTERING ===")
-dbscan = DBSCAN(eps=0.3, min_samples=5)
+dbscan = DBSCAN(eps=0.9, min_samples=5)
 dbscan_labels = dbscan.fit_predict(X)
 
 n_clusters_dbscan = len(set(dbscan_labels)) - (1 if -1 in dbscan_labels else 0)
@@ -93,12 +96,10 @@ plt.savefig('images/04_dbscan.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 
-target_col = numeric_data.columns[0]
-X_reg = numeric_data.drop(columns=[target_col]).values
+target_col = 'total_price'
+X_reg = numeric_data.drop(columns=['total_price', 'listed_price']).values
 y_reg = numeric_data[target_col].values
-X_train, X_test, y_train, y_test = train_test_split(
-    X_reg, y_reg, test_size=0.2, random_state=42
-)
+X_train, X_test, y_train, y_test = train_test_split(X_reg, y_reg, test_size=0.3, random_state=42)
 
 
 print("\n=== LINEAR REGRESSION ===")
@@ -143,16 +144,14 @@ plt.close()
 
 
 print("\n=== LASSO REGRESSION ===")
-lasso = Lasso(alpha=0.1, max_iter=1000)
+lasso = Lasso()
 lasso.fit(X_train, y_train)
 y_pred_lasso = lasso.predict(X_test)
 mse_lasso = mean_squared_error(y_test, y_pred_lasso)
 rmse_lasso = np.sqrt(mse_lasso)
 r2_lasso = r2_score(y_test, y_pred_lasso)
 mae_lasso = mean_absolute_error(y_test, y_pred_lasso)
-n_zero_coef = np.sum(lasso.coef_ == 0)
 print(f"MSE: {mse_lasso:.6f}, RMSE: {rmse_lasso:.6f}, MAE: {mae_lasso:.6f}, R²: {r2_lasso:.6f}")
-print(f"Zero coefficients: {n_zero_coef}/{len(lasso.coef_)}")
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 axes[0, 0].scatter(y_test, y_pred_lasso, alpha=0.6, s=50, color='green')
@@ -186,7 +185,7 @@ plt.close()
 
 
 print("\n=== RIDGE REGRESSION ===")
-ridge = Ridge(alpha=0.1)
+ridge = Ridge()
 ridge.fit(X_train, y_train)
 y_pred_ridge = ridge.predict(X_test)
 mse_ridge = mean_squared_error(y_test, y_pred_ridge)
